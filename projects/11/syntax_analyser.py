@@ -2,6 +2,7 @@
 
 import sys
 import os
+import pathlib
 import pprint
 
 from tokenizer import Tokenizer
@@ -35,9 +36,9 @@ if __name__ == "__main__":
         t = Tokenizer(f)
         t.run()
 
-        file_path = f"dist/{f.split('.')[0]}T.xml"
-        c = CompilationEngine(file_path)
-        c.run()
+        file_name = pathlib.PurePath(f).name.split(".")[0]
+        c = CompilationEngine(file_name)
+        ls = c.run()
 
-        g = CodeGenerator(file_path)
+        g = CodeGenerator(file_name, ls)
         g.run()

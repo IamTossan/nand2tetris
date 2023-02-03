@@ -21,17 +21,15 @@ def to_xml(node):
         return f"{tab(node['depth'])}<{node['kind']}> {node['label']} </{node['kind']}>"
 
 class CompilationEngine:
-    def __init__(self, file_path):
-        self.file_path = file_path
+    def __init__(self, file_name):
+        self.file_name = file_name
 
     def open(self):
-        file_name = pathlib.PurePath(self.file_path).name
-        return open(f"dist/{file_name.split('.')[0]}.xml")
+        return open(f"dist/{self.file_name}T.xml")
 
     def write(self, ls):
-        file_name = pathlib.PurePath(self.file_path).name.split(".")[0][:-1]
 
-        with open(f"dist/{file_name}.xml", "w") as f:
+        with open(f"dist/{self.file_name}.xml", "w") as f:
             for l in ls:
                 f.write(f"{to_xml(l)}\n")
 
