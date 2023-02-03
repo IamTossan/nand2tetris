@@ -1,0 +1,97 @@
+class Game {
+    field String answer;
+    field int retries;
+    field Array isFound;
+
+    constructor Game new(String a, int r) {
+        var int i;
+
+        let answer = a;
+        let retries = r;
+        let isFound = Array.new(a.length());
+        let i = 0;
+        while(i < answer.length()) {
+            let isFound[i] = false;
+            let i = i + 1;
+        }
+        return this;
+    }
+
+    method String getAnswer() { return answer; }
+    method int getRetries() { return retries; }
+
+    method void dispose() {
+      do Memory.deAlloc(this);
+      return;
+   }
+
+    method void renderResult() {
+        var int l;
+
+        do Output.moveCursor(0, 0);
+        let l = 0;
+        while(l < answer.length()) {
+            if(isFound[l] = true) {
+                do Output.printChar(answer.charAt(l));
+            } else {
+                do Output.printChar("_");
+            }
+            let l = l + 1;
+        }
+        do Output.println();
+        return;
+    }
+
+    method void renderRetries() {
+        return;
+    }
+
+    method void renderAttemps() {
+        return;
+    }
+
+    method void run() {
+        var int l;
+        var int i;
+        var char try;
+        var bool hasFound;
+        var bool allFound;
+        let allFound = false;
+
+        do renderResult();
+
+        while((allFound = false) & (~(retries = 0))) {
+            do Output.printString("Guess a letter : ");
+            let try = Keyboard.readChar();
+            let l = 0;
+            let hasFound = false;
+            while(l < answer.length()) {
+                if(answer.charAt(l) = try) {
+                    let isFound[l] = true;
+                    let hasFound = true;
+                }
+                let l = l + 1;
+            }
+            do renderResult();
+
+            let allFound = true;
+            let i = 0;
+            while(i < answer.length()) {
+                if(isFound[i] = false) {
+                    let allFound = false;
+                }
+                let i = i + 1;
+            }
+            if(hasFound = false) {
+                let retries = retries - 1;
+            }
+        }
+        do Output.println();
+        if(allFound = true) {
+            do Output.printString("You win");
+        } else {
+            do Output.printString("You lose");
+        }
+        return;
+    }
+}
