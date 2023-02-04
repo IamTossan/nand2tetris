@@ -9,11 +9,13 @@ from tokenizer import Tokenizer
 from compilation_engine import CompilationEngine
 from code_generator import CodeGenerator
 
+
 def counter_generator():
     num = 0
     while True:
         yield num
         num += 1
+
 
 counter = counter_generator()
 

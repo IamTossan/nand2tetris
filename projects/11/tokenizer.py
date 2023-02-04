@@ -2,6 +2,7 @@ import pathlib
 import re
 from utils import compose, flat_map
 
+
 class Tokenizer:
     KEYWORDS = [
         "class",
