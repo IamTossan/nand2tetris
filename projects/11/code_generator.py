@@ -1,4 +1,5 @@
 import pathlib
+import uuid
 
 import pprint
 
@@ -36,6 +37,7 @@ class CodeGenerator:
                 v = {
                     "name": ls.pop(0)["label"],
                     "type": _type,
+                    "kind": "static",
                     "index": len(self.static),
                 }
                 self.static[v["name"]] = v
@@ -43,6 +45,7 @@ class CodeGenerator:
                 v = {
                     "name": ls.pop(0)["label"],
                     "type": _type,
+                    "kind": "field",
                     "index": len(self.field),
                 }
                 self.field[v["name"]] = v
@@ -60,6 +63,7 @@ class CodeGenerator:
             args[name] = {
                 "name": name,
                 "type": _type,
+                "kind": "argument",
                 "index": len(args),
             }
             if ls[0]["kind"] != "parameterList":
@@ -78,6 +82,7 @@ class CodeGenerator:
                 local[name] = {
                     "name": name,
                     "type": _type,
+                    "kind": "local",
                     "index": len(local),
                 }
                 ls.pop(0)
@@ -86,12 +91,43 @@ class CodeGenerator:
 
     def compile_term(self, ls, acc, vars):
         ls.pop(0)
-        term = ls.pop(0)
-        if term["kind"] == "integerConstant":
-            acc.append(f"push constant {term['label']}")
-        elif term["label"] == "(":
+        if ls[0]["kind"] == "integerConstant":
+            acc.append(f"push constant {ls[0]['label']}")
+            ls.pop(0)
+        elif ls[0]["label"] == "(":
+            ls.pop(0)
             self.compile_expression(ls, acc, vars)
             ls.pop(0)
+        elif ls[1]["label"] == ".":
+            t = ls.pop(0)
+            ls.pop(0)
+            f = ls.pop(0)
+            func_name = "{}.{}".format(t["label"], f["label"])
+            ls.pop(0)
+            expressions = self.compile_expression_list(ls, acc, vars)
+            ls.pop(0)
+            acc.append(f"call {func_name} {len(expressions)}")
+        elif ls[0]["label"] == "-":
+            ls.pop(0)
+            self.compile_term(ls, acc, vars)
+            acc.append("neg")
+        elif ls[0]["label"] == "~":
+            ls.pop(0)
+            self.compile_term(ls, acc, vars)
+            acc.append("not")
+        elif ls[0]["kind"] == "identifier":
+            v = vars[ls.pop(0)["label"]]
+            acc.append(f"push {v['kind']} {v['index']}")
+        elif ls[0]["label"] == "true":
+            ls.pop(0)
+            acc.append("push constant 1")
+            acc.append("neg")
+        elif ls[0]["label"] == "false":
+            ls.pop(0)
+            acc.append("push constant 0")
+        else:
+            print("else term", ls[0])
+            # pprint.pprint(ls[:10])
         ls.pop(0)
 
     def compile_op(self, ls, acc, vars):
@@ -100,6 +136,12 @@ class CodeGenerator:
             return "add"
         if op == "-":
             return "sub"
+        if op == "=":
+            return "eq"
+        if op == "&amp;":
+            return "and"
+        if op == "&gt;":
+            return "gt"
         if op == "*":
             return "call Math.multiply 2"
 
@@ -116,7 +158,9 @@ class CodeGenerator:
     def compile_expression_list(self, ls, acc, vars):
         ls.pop(0)
         expressions = []
+        expressions.append(self.compile_expression(ls, acc, vars))
         while ls[0]["kind"] != "expressionList":
+            ls.pop(0)
             expressions.append(self.compile_expression(ls, acc, vars))
         ls.pop(0)
         return expressions
@@ -138,12 +182,85 @@ class CodeGenerator:
     def compile_return_statement(self, ls, acc, vars):
         ls.pop(0)
         ls.pop(0)
+        if ls[0]["label"] != ";":
+            self.compile_expression(ls, acc, vars)
+        else:
+            acc.append("push constant 0")
         ls.pop(0)
         ls.pop(0)
-        acc.append("push constant 0")
         acc.append("return")
 
-    def compile_subroutine_body(self, ls, acc, args):
+    def compile_let_statement(self, ls, acc, vars):
+        ls.pop(0)
+        ls.pop(0)
+        target = vars[ls.pop(0)["label"]]
+        ls.pop(0)
+        self.compile_expression(ls, acc, vars)
+        acc.append(f"pop {target['kind']} {target['index']}")
+        ls.pop(0)
+        ls.pop(0)
+
+    def compile_if_statement(self, ls, acc, vars):
+        ls.pop(0)
+        ls.pop(0)
+        ls.pop(0)
+        self.compile_expression(ls, acc, vars)
+        acc.append("not")
+        end_if_label = uuid.uuid4()
+        else_label = uuid.uuid4()
+        acc.append(f"if-goto {else_label}")
+        ls.pop(0)
+        ls.pop(0)
+
+        self.compile_statements(ls, acc, vars)
+        ls.pop(0)
+        if ls[0]["label"] == "else":
+            acc.append(f"goto {end_if_label}")
+            acc.append(f"label {else_label}")
+            ls.pop(0)
+            ls.pop(0)
+            self.compile_statements(ls, acc, vars)
+        acc.append(f"label {end_if_label}")
+        ls.pop(0)
+        ls.pop(0)
+
+    def compile_while_statement(self, ls, acc, vars):
+        while_start = uuid.uuid4()
+        while_end = uuid.uuid4()
+
+        ls.pop(0)
+        ls.pop(0)
+        acc.append(f"label {while_start}")
+        ls.pop(0)
+        self.compile_expression(ls, acc, vars)
+        acc.append("not")
+        acc.append(f"if-goto {while_end}")
+        ls.pop(0)
+        ls.pop(0)
+        self.compile_statements(ls, acc, vars)
+        acc.append(f"goto {while_start}")
+        acc.append(f"label {while_end}")
+        ls.pop(0)
+        ls.pop(0)
+
+    def compile_statements(self, ls, acc, vars):
+        ls.pop(0)
+        while ls[0]["kind"] != "statements":
+            if ls[0]["kind"] == "doStatement":
+                self.compile_do_statement(ls, acc, vars)
+            elif ls[0]["kind"] == "returnStatement":
+                self.compile_return_statement(ls, acc, vars)
+            elif ls[0]["kind"] == "letStatement":
+                self.compile_let_statement(ls, acc, vars)
+            elif ls[0]["kind"] == "ifStatement":
+                self.compile_if_statement(ls, acc, vars)
+            elif ls[0]["kind"] == "whileStatement":
+                self.compile_while_statement(ls, acc, vars)
+            else:
+                ls.pop(0)
+        ls.pop(0)
+
+    def compile_subroutine_body(self, ls, acc, args, subroutine_name):
         ls.pop(0)
         ls.pop(0)
 
@@ -151,21 +268,14 @@ class CodeGenerator:
         if ls[0]["kind"] == "varDec":
             local = self.get_local(ls)
 
-        ls.pop(0)
         vars = {
-            "static": self.static,
-            "field": self.field,
-            "args": args,
-            "local": local,
+            **self.static,
+            **self.field,
+            **args,
+            **local,
         }
-        while ls[0]["kind"] != "statements":
-            if ls[0]["kind"] == "doStatement":
-                self.compile_do_statement(ls, acc, vars)
-            elif ls[0]["kind"] == "returnStatement":
-                self.compile_return_statement(ls, acc, vars)
-            else:
-                ls.pop(0)
-        ls.pop(0)
+        acc.append(f"function {self.class_name}.{subroutine_name} {len(local)}")
+        self.compile_statements(ls, acc, vars)
         ls.pop(0)
 
     def compile_subroutine(self, ls, acc):
@@ -178,8 +288,9 @@ class CodeGenerator:
         args = self.get_args(ls)
         ls.pop(0)
 
-        acc.append(f"function {self.class_name}.{subroutine_name} {len(args)}")
-        self.compile_subroutine_body(ls, acc, args)
+        acc.append("")
+        self.compile_subroutine_body(ls, acc, args, subroutine_name)
+        ls.pop(0)
         ls.pop(0)
 
     def compile(self, ls):
@@ -192,7 +303,8 @@ class CodeGenerator:
         if ls[0]["kind"] == "classVarDec":
             self.set_class_vars(ls)
 
-        self.compile_subroutine(ls, acc)
+        while ls[0]["kind"] == "subroutineDec":
+            self.compile_subroutine(ls, acc)
         ls.pop(0)
         ls.pop(0)
 
