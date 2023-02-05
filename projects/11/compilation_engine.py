@@ -102,12 +102,12 @@ class CompilationEngine:
     @staticmethod
     def makeTerm(tokens, acc, depth):
         acc.append(make_node(depth, {"kind": "term"}, "open"))
-        if tokens[0]["kind"] == "<identifier>" and tokens[1]["label"] == "(":
+        if tokens[0]["kind"] == "identifier" and tokens[1]["label"] == "(":
             acc.append(make_node(depth + 1, tokens.pop(0)))
             acc.append(make_node(depth + 1, tokens.pop(0)))
             acc, tokens = CompilationEngine.makeExpressionList(tokens, acc, depth + 1)
             acc.append(make_node(depth + 1, tokens.pop(0)))
-        elif tokens[0]["kind"] == "<identifier>" and tokens[1]["label"] == ".":
+        elif tokens[0]["kind"] == "identifier" and tokens[1]["label"] == ".":
             acc.append(make_node(depth + 1, tokens.pop(0)))
             acc.append(make_node(depth + 1, tokens.pop(0)))
             acc.append(make_node(depth + 1, tokens.pop(0)))
