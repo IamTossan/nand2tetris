@@ -286,7 +286,7 @@ class CompilationEngine:
     def makeParameterList(tokens, acc, depth):
         acc.append(make_node(depth, {"kind": "parameterList"}, "open"))
         while not tokens[0]["label"] == ")":
-            acc.append(make_node(depth, tokens.pop(0)))
+            acc.append(make_node(depth + 1, tokens.pop(0)))
         acc.append(make_node(depth, {"kind": "parameterList"}, "close"))
         return acc, tokens
 

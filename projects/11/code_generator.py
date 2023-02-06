@@ -45,7 +45,7 @@ class CodeGenerator:
                 v = {
                     "name": ls.pop(0)["label"],
                     "type": _type,
-                    "kind": "field",
+                    "kind": "this",
                     "index": len(self.field),
                 }
                 self.field[v["name"]] = v
@@ -54,8 +54,15 @@ class CodeGenerator:
         ls.pop(0)
         ls.pop(0)
 
-    def get_args(self, ls):
+    def get_args(self, ls, subroutine_kind):
         args = {}
+        if subroutine_kind == "method":
+            args["this"] = {
+                "name": "this",
+                "type": self.class_name,
+                "kind": "argument",
+                "index": len(args),
+            }
         ls.pop(0)
         while ls[0]["kind"] != "parameterList" and ls[0]["type"] != "close":
             _type = ls.pop(0)["label"]
@@ -99,10 +106,15 @@ class CodeGenerator:
             self.compile_expression(ls, acc, vars)
             ls.pop(0)
         elif ls[1]["label"] == ".":
-            t = ls.pop(0)
+            o = ls.pop(0)["label"]
             ls.pop(0)
             f = ls.pop(0)
-            func_name = "{}.{}".format(t["label"], f["label"])
+
+            if o in vars:
+                acc.append(f"push {vars[o]['kind']} {vars[o]['index']}")
+
+            print(o, vars)
+            func_name = "{}.{}".format(o, f["label"])
             ls.pop(0)
             expressions = self.compile_expression_list(ls, acc, vars)
             ls.pop(0)
@@ -120,11 +132,14 @@ class CodeGenerator:
             acc.append(f"push {v['kind']} {v['index']}")
         elif ls[0]["label"] == "true":
             ls.pop(0)
-            acc.append("push constant 1")
-            acc.append("neg")
+            acc.append("push constant 0")
+            acc.append("not")
         elif ls[0]["label"] == "false":
             ls.pop(0)
             acc.append("push constant 0")
+        elif ls[0]["label"] == "this":
+            ls.pop(0)
+            acc.append("push pointer 0")
         else:
             print("else term", ls[0])
             # pprint.pprint(ls[:10])
@@ -142,8 +157,12 @@ class CodeGenerator:
             return "and"
         if op == "&gt;":
             return "gt"
+        if op == "&lt;":
+            return "lt"
         if op == "*":
             return "call Math.multiply 2"
+        if op == "/":
+            return "call Math.divide 2"
 
     def compile_expression(self, ls, acc, vars):
         ls.pop(0)
@@ -158,25 +177,38 @@ class CodeGenerator:
     def compile_expression_list(self, ls, acc, vars):
         ls.pop(0)
         expressions = []
-        expressions.append(self.compile_expression(ls, acc, vars))
         while ls[0]["kind"] != "expressionList":
-            ls.pop(0)
             expressions.append(self.compile_expression(ls, acc, vars))
+            if ls[0]["kind"] != "expressionList":
+                ls.pop(0)
         ls.pop(0)
         return expressions
 
     def compile_do_statement(self, ls, acc, vars):
         ls.pop(0)
         ls.pop(0)
-        func_name = "{}{}{}".format(
-            ls.pop(0)["label"], ls.pop(0)["label"], ls.pop(0)["label"]
-        )
-        ls.pop(0)
+        o = ls.pop(0)["label"]
+        s = ls.pop(0)["label"]
+
+        if o in vars:
+            acc.append(f"push {vars[o]['kind']} {vars[o]['index']}")
+
+        if s == "(":
+            func_name = f"{self.class_name}.{o}"
+            acc.append("push pointer 0")
+        else:
+            func_name = "{}.{}".format(
+                vars[o]["type"] if o in vars else o, ls.pop(0)["label"]
+            )
+            ls.pop(0)
+
         expressions = self.compile_expression_list(ls, acc, vars)
         ls.pop(0)
         ls.pop(0)
         ls.pop(0)
-        acc.append(f"call {func_name} {len(expressions)}")
+        acc.append(
+            f"call {func_name} {len(expressions) + (1 if o in vars or s == '(' else 0)}"
+        )
         acc.append("pop temp 0")
 
     def compile_return_statement(self, ls, acc, vars):
@@ -220,8 +252,10 @@ class CodeGenerator:
             ls.pop(0)
             ls.pop(0)
             self.compile_statements(ls, acc, vars)
+            ls.pop(0)
+        else:
+            acc.append(f"label {else_label}")
         acc.append(f"label {end_if_label}")
-        ls.pop(0)
         ls.pop(0)
 
     def compile_while_statement(self, ls, acc, vars):
@@ -260,7 +294,7 @@ class CodeGenerator:
                 ls.pop(0)
         ls.pop(0)
 
-    def compile_subroutine_body(self, ls, acc, args, subroutine_name):
+    def compile_subroutine_body(self, ls, acc, args, subroutine_name, subroutine_kind):
         ls.pop(0)
         ls.pop(0)
 
@@ -275,6 +309,13 @@ class CodeGenerator:
             **local,
         }
         acc.append(f"function {self.class_name}.{subroutine_name} {len(local)}")
+        if subroutine_kind == "constructor":
+            acc.append(f"push constant {len(self.field)}")
+            acc.append("call Memory.alloc 1")
+            acc.append("pop pointer 0")
+        elif subroutine_kind == "method":
+            acc.append("push argument 0")
+            acc.append("pop pointer 0")
         self.compile_statements(ls, acc, vars)
         ls.pop(0)
 
@@ -285,11 +326,11 @@ class CodeGenerator:
         subroutine_name = ls.pop(0)["label"]
 
         ls.pop(0)
-        args = self.get_args(ls)
+        args = self.get_args(ls, kind)
         ls.pop(0)
 
         acc.append("")
-        self.compile_subroutine_body(ls, acc, args, subroutine_name)
+        self.compile_subroutine_body(ls, acc, args, subroutine_name, kind)
         ls.pop(0)
         ls.pop(0)
 
@@ -300,7 +341,7 @@ class CodeGenerator:
         self.class_name = ls.pop(0)["label"]
         ls.pop(0)
 
-        if ls[0]["kind"] == "classVarDec":
+        while ls[0]["kind"] == "classVarDec":
             self.set_class_vars(ls)
 
         while ls[0]["kind"] == "subroutineDec":
