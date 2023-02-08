@@ -101,9 +101,25 @@ class CodeGenerator:
         if ls[0]["kind"] == "integerConstant":
             acc.append(f"push constant {ls[0]['label']}")
             ls.pop(0)
+        elif ls[0]["kind"] == "stringConstant":
+            s = ls.pop(0)["label"]
+            acc.append(f"push constant {len(s)}")
+            acc.append("call String.new 1")
+            for i in s:
+                acc.append(f"push constant {ord(i)}")
+                acc.append(f"call String.appendChar 2")
         elif ls[0]["label"] == "(":
             ls.pop(0)
             self.compile_expression(ls, acc, vars)
+            ls.pop(0)
+        elif ls[1]["label"] == "[":
+            t = ls.pop(0)["label"]
+            acc.append(f"push {vars[t]['kind']} {vars[t]['index']}")
+            ls.pop(0)
+            self.compile_expression(ls, acc, vars)
+            acc.append("add")
+            acc.append("pop pointer 1")
+            acc.append("push that 0")
             ls.pop(0)
         elif ls[1]["label"] == ".":
             o = ls.pop(0)["label"]
@@ -113,12 +129,11 @@ class CodeGenerator:
             if o in vars:
                 acc.append(f"push {vars[o]['kind']} {vars[o]['index']}")
 
-            print(o, vars)
-            func_name = "{}.{}".format(o, f["label"])
+            func_name = "{}.{}".format(vars[o]["type"] if o in vars else o, f["label"])
             ls.pop(0)
             expressions = self.compile_expression_list(ls, acc, vars)
             ls.pop(0)
-            acc.append(f"call {func_name} {len(expressions)}")
+            acc.append(f"call {func_name} {len(expressions) + (1 if o in vars else 0)}")
         elif ls[0]["label"] == "-":
             ls.pop(0)
             self.compile_term(ls, acc, vars)
@@ -134,6 +149,9 @@ class CodeGenerator:
             ls.pop(0)
             acc.append("push constant 0")
             acc.append("not")
+        elif ls[0]["label"] == "null":
+            ls.pop(0)
+            acc.append("push constant 0")
         elif ls[0]["label"] == "false":
             ls.pop(0)
             acc.append("push constant 0")
@@ -153,6 +171,8 @@ class CodeGenerator:
             return "sub"
         if op == "=":
             return "eq"
+        if op == "|":
+            return "or"
         if op == "&amp;":
             return "and"
         if op == "&gt;":
@@ -226,9 +246,22 @@ class CodeGenerator:
         ls.pop(0)
         ls.pop(0)
         target = vars[ls.pop(0)["label"]]
-        ls.pop(0)
-        self.compile_expression(ls, acc, vars)
-        acc.append(f"pop {target['kind']} {target['index']}")
+        if ls[0]["label"] == "[":
+            ls.pop(0)
+            acc.append(f"push {target['kind']} {target['index']}")
+            self.compile_expression(ls, acc, vars)
+            acc.append("add")
+            ls.pop(0)
+            ls.pop(0)
+            self.compile_expression(ls, acc, vars)
+            acc.append("pop temp 0")
+            acc.append("pop pointer 1")
+            acc.append("push temp 0")
+            acc.append("pop that 0")
+        else:
+            ls.pop(0)
+            self.compile_expression(ls, acc, vars)
+            acc.append(f"pop {target['kind']} {target['index']}")
         ls.pop(0)
         ls.pop(0)
 
